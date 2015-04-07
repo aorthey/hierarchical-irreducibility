@@ -8,12 +8,30 @@ from math import pi,cos,sin,acos,asin,atan
 from scipy.interpolate import interp1d,splev,splrep,splprep
 from scipy.misc import derivative
 
+
+from mpl_toolkits.mplot3d import Axes3D
+from matplotlib.patches import FancyArrowPatch
+from mpl_toolkits.mplot3d import proj3d
+
 import matplotlib.pyplot as plt
 
 ze = np.array((0,0,1))
 ye = np.array((0,1,0))
 xe = np.array((1,0,0))
 colorLinks = 'k'
+
+
+class Arrow3D(FancyArrowPatch):
+    def __init__(self, xs, ys, zs, *args, **kwargs):
+        FancyArrowPatch.__init__(self, (0,0), (0,0), *args, **kwargs)
+        self._verts3d = xs, ys, zs
+
+    def draw(self, renderer):
+        xs3d, ys3d, zs3d = self._verts3d
+        xs, ys, zs = proj3d.proj_transform(xs3d, ys3d, zs3d, renderer.M)
+        self.set_positions((xs[0],ys[0]),(xs[1],ys[1]))
+        FancyArrowPatch.draw(self, renderer)
+
 
 def Rz(t):
         return np.array([[cos(t),-sin(t),0],[sin(t),cos(t),0],[0,0,1]])
@@ -84,8 +102,11 @@ def HT(R,T):
         H1 = np.hstack((H1,[[T[0]],[T[1]],[T[2]],[1]]))
         return H1
 
+def drawCylinder(ax,p1,p2,linewidth=5,style='-k'):
+        plt.plot([p1[0],p1[0]+p2[0]],[p1[1],p1[1]+p2[1]],[p1[2],p1[2]+p2[2]],style,linewidth=linewidth)
 
 def drawSphere(ax,x,y,z,R):
+        N = 10
         u, v = np.mgrid[0:2*np.pi:10j, 0:np.pi:10j]
         xx=np.cos(u)*np.sin(v)
         yy=np.sin(u)*np.sin(v)
@@ -93,7 +114,20 @@ def drawSphere(ax,x,y,z,R):
         xx = R*xx + x
         yy = R*yy + y
         zz = R*zz + z
-        ax.plot_wireframe(xx, yy, zz, color=colorLinks, rstride = 1, cstride = 1)
+        ax.plot_surface(xx, yy, zz,  rstride=1, cstride=1, \
+                        color='k',alpha=0.5, edgecolors='none')
+        #ax.plot_wireframe(xx, yy, zz, color=colorLinks, rstride = 1, cstride = 1)
+
+        #u = np.linspace(0, 2 * np.pi, N)
+        #v = np.linspace(0, np.pi, N)
+
+        #xx = R * np.outer(np.cos(u), np.sin(v)) + x
+        #yy = R * np.outer(np.sin(u), np.sin(v)) + y
+        #zz = R * np.outer(np.ones(np.size(u)), np.cos(v)) + z
+
+        ##ax.plot_wireframe(xx, yy, zz, color=colorLinks, rstride = 1, cstride = 1)
+        #ax.plot_surface(xx, yy, zz,  rstride=1, cstride=1, color='r')
+
 
 
 def getZYsphericalRot(ap, xl):
@@ -134,6 +168,10 @@ def getGlobalTransformation(tau, dtau):
 
 def plotFromTo(p1,p2,style='-r',linewidth=1):
         plt.plot([p1[0],p1[0]+p2[0]],[p1[1],p1[1]+p2[1]],[p1[2],p1[2]+p2[2]],style,linewidth=linewidth)
+def plotArrowFromTo(p1,p2,style='r',linewidth=1):
+        a = Arrow3D([p1[0],p1[0]+p2[0]],[p1[1],p1[1]+p2[1]],[p1[2],p1[2]+p2[2]],\
+                color=style, mutation_scale=20, lw=linewidth, arrowstyle="-|>")
+        ax.add_artist(a)
 
 def computeThetaGamma(f0, df0, ddf0, dddf0, ft, dft, ddft):
 
@@ -181,7 +219,6 @@ def computeThetaGammaFromTauNgeneralized(f,t0,length,delta):
         theta = np.zeros((N-1,1))
         gamma = np.zeros((N-1,1))
 
-
         tcur = t0
         [fcur,dfcur,ddfcur] = funcEval(f,t0)
         dddfcur = np.cross(dfcur,ddfcur)
@@ -204,7 +241,7 @@ def computeThetaGammaFromTauNgeneralized(f,t0,length,delta):
                 fcur = fnext
                 dfcur = dfnext
                 ddfcur = ddfnext
-                dddfcur = np.cross(dfcur,ddfcur)
+                dddfcur = np.cross(dfnext,ddfnext)
                 tcur = tnext
 
         return [theta,gamma]
@@ -284,34 +321,38 @@ def forwardKinematics(ax,tau,dtau,ddtau,theta,gamma,length,delta):
                 p[i,:] = dot(H[i,:,:],p0t)
 
         for i in range(0,N-1):
-                plt.plot([p[i,0],p[i+1,0]],[p[i,1],p[i+1,1]],[p[i,2],p[i+1,2]],'-k',linewidth=1)
+                plt.plot([p[i,0],p[i+1,0]],[p[i,1],p[i+1,1]],[p[i,2],p[i+1,2]],'-k',linewidth=5)
+
+        for i in range(0,N):
+                drawSphere(ax, p[i,0],p[i,1],p[i,2],delta[i])
+        
+        plotArrowFromTo(tau,dtau,style='k')
 
         plt.plot([p[0,0],p[0,0]+xe[0]],[p[0,1],p[0,1]+xe[1]],[p[0,2],p[0,2]+xe[2]],'-k',linewidth=1)
         plt.plot([p[0,0],p[0,0]+ye[0]],[p[0,1],p[0,1]+ye[1]],[p[0,2],p[0,2]+ye[2]],'-k',linewidth=1)
         plt.plot([p[0,0],p[0,0]+ze[0]],[p[0,1],p[0,1]+ze[1]],[p[0,2],p[0,2]+ze[2]],'-k',linewidth=1)
 
-        v0 = np.hstack([1.0*xe,1])
-        v0 = dot(H[0,:,:],v0)
-        plt.plot([p[0,0],v0[0]],[p[0,1],v0[1]],[p[0,2],v0[2]],'-g',linewidth=3)
+        #v0 = np.hstack([1.0*xe,1])
+        #v0 = dot(H[0,:,:],v0)
+        #plt.plot([p[0,0],v0[0]],[p[0,1],v0[1]],[p[0,2],v0[2]],'-g',linewidth=3)
+        plotArrowFromTo(tau,ddtau,style='g')
 
-        v0 = np.hstack([-3*xe,1])
-        v0 = dot(H[0,:,:],v0)
-        plt.plot([p[0,0],v0[0]],[p[0,1],v0[1]],[p[0,2],v0[2]],'--k',linewidth=3)
+        #v0 = np.hstack([-3*xe,1])
+        #v0 = dot(H[0,:,:],v0)
+        #plt.plot([p[0,0],v0[0]],[p[0,1],v0[1]],[p[0,2],v0[2]],'--k',linewidth=3)
 
         #v0 = np.hstack([1*ddtau,1])
         #v0 = dot(H[0,:,:],v0)
 
         #plt.plot([p[0,0],v0[0]],[p[0,1],v0[1]],[p[0,2],v0[2]],'--m',linewidth=2)
-        v0 = np.hstack([1*ye,1])
-        v0 = dot(H[0,:,:],v0)
-        plt.plot([p[0,0],v0[0]],[p[0,1],v0[1]],[p[0,2],v0[2]],'--m',linewidth=2)
+        #v0 = np.hstack([1*ye,1])
+        #v0 = dot(H[0,:,:],v0)
+        #plt.plot([p[0,0],v0[0]],[p[0,1],v0[1]],[p[0,2],v0[2]],'--m',linewidth=2)
 
-        plt.plot([p[0,0],tau[0]+dtau[0]],[p[0,1],tau[1]+dtau[1]],[p[0,2],tau[2]+dtau[2]],'-r',linewidth=2)
-        plt.plot([p[0,0],tau[0]+ddtau[0]],[p[0,1],tau[1]+ddtau[1]],[p[0,2],tau[2]+ddtau[2]],'-r',linewidth=2)
-        plt.plot([p[0,0],tau[0]+dddtau[0]],[p[0,1],tau[1]+dddtau[1]],[p[0,2],tau[2]+dddtau[2]],'-r',linewidth=2)
+        #plt.plot([p[0,0],tau[0]+dtau[0]],[p[0,1],tau[1]+dtau[1]],[p[0,2],tau[2]+dtau[2]],'-r',linewidth=2)
+        #plt.plot([p[0,0],tau[0]+ddtau[0]],[p[0,1],tau[1]+ddtau[1]],[p[0,2],tau[2]+ddtau[2]],'-r',linewidth=2)
+        #plt.plot([p[0,0],tau[0]+dddtau[0]],[p[0,1],tau[1]+dddtau[1]],[p[0,2],tau[2]+dddtau[2]],'-r',linewidth=2)
 
-        for i in range(0,N):
-                drawSphere(ax, p[i,0],p[i,1],p[i,2],delta[i])
 
 
 
@@ -402,13 +443,13 @@ if __name__ == '__main__':
         fnew = splev(tnew,f)
 
         plt.plot(fnew[0],fnew[1],fnew[2],'-',linewidth=35,solid_capstyle="round",alpha=0.2)
-        #lim = 2
+        lim = 3
         #ax.set_xlim((-lim,lim))
         #ax.set_ylim((-lim,lim))
         #ax.set_zlim((-lim,lim))
-        #ax.set_xlabel('X')
-        #ax.set_ylabel('Y')
-        #ax.set_zlabel('Z')
+        ax.set_xlabel('X')
+        ax.set_ylabel('Y')
+        ax.set_zlabel('Z')
         #ax.set_aspect('equal')
         ax.set_aspect('equal', 'datalim')
         plt.show()
